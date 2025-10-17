@@ -1,14 +1,10 @@
-import os
-
-import torch
 from dotenv import load_dotenv
-from langchain.chains import RetrievalQA
-from langchain_huggingface import HuggingFacePipeline
 from units.PDF_reader import read_pdf
 from units.chunk_breaker import split_text
 from units.embeddings import create_embeddings
 from units.faiss import create_FAISS
-
+from units.rag_chain import create_RAG_chain
+from units.create_system_prompt import adjust_system_prompt
 load_dotenv()
 
 text = read_pdf("HarryPotter.pdf")
@@ -18,30 +14,17 @@ embeddings = create_embeddings()
 vectorstore = create_FAISS(chunks, embeddings)
 retriever = vectorstore.as_retriever()
 
-llm = HuggingFacePipeline.from_model_id(
-    model_id=os.getenv("MODEL_ID"),
-    task="text-generation",
-    pipeline_kwargs={
-        "max_new_tokens": 256,
-        "do_sample": True,
-        "temperature": 0.7,
-        "top_p": 0.95
-    },
-    model_kwargs={
-        "torch_dtype": torch.bfloat16,
-        "trust_remote_code": True
-    },
-    device_map="auto"
+system_prompt = (
+    "Ти — розумний асистент, який відповідає українською мовою. "
+    "Будь ввічливим і пояснюй просто."
+    "Не роби виділення тексту"
 )
 
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    retriever=retriever,
-    chain_type="stuff"
-)
+system_prompt = adjust_system_prompt(system_prompt)
 
-query = "Что такое философский камень?"
+qa_chain = create_RAG_chain(retriever, system_prompt)
+
+query = "Що таке філосовський камінь?"
 result = qa_chain.invoke({"query": query})
 
-# Выводим результат
 print(result['result'])
